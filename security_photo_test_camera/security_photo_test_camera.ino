@@ -53,11 +53,11 @@ void setup() {
   pinMode(LED_FLASH, OUTPUT);
 
   if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA;
+    config.frame_size = FRAMESIZE_VGA; // Options: QQVGA/QVGA/VGA/SVGA/XGA/SXGA/UXGA
     config.jpeg_quality = 10;
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_QVGA;
+    config.frame_size = FRAMESIZE_QQVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
   }
@@ -80,15 +80,15 @@ void setup() {
   client.setInsecure(); // allow HTTPS without cert
   Serial.println("Setup done. Taking photo...");
   
-  delay(3000);
-  sendPhotoTelegram();  // Take and send one photo at startup
+  //delay(3000);
+  //sendPhotoTelegram();  // Take and send one photo at startup
 }
 
 void loop() {
   // Nothing here (one-time test)
-  //delay(10000);
-  //sendPhotoTelegram();
-  //delay(10000);
+  delay(10000);
+  sendPhotoTelegram();
+  delay(10000);
 }
 
 void sendPhotoTelegram() {
