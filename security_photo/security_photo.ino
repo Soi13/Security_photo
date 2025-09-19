@@ -10,8 +10,6 @@ const char* password = "";
 String BOTtoken = "";
 String CHAT_ID  = "";
 
-#define PIR_PIN 13
-
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h"
 

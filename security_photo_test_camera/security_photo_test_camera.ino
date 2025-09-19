@@ -1,6 +1,7 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include "esp_system.h"
 
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h"
@@ -53,13 +54,15 @@ void setup() {
   pinMode(LED_FLASH, OUTPUT);
 
   if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA; // Options: QQVGA/QVGA/VGA/SVGA/XGA/SXGA/UXGA
-    config.jpeg_quality = 10;
-    config.fb_count = 2;
+    config.frame_size = FRAMESIZE_VGA; //Options: QQVGA/QVGA/VGA/SVGA/XGA/SXGA/UXGA
+    config.jpeg_quality = 14;
+    config.fb_count = 1;
+    Serial.println("PsRam On");
   } else {
-    config.frame_size = FRAMESIZE_QQVGA;
+    config.frame_size = FRAMESIZE_QVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
+    Serial.println("PsRam Off");
   }
 
   // Init camera
