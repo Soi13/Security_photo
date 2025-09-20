@@ -2,23 +2,31 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include "esp_system.h"
+#include <PubSubClient.h>
 
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h"
 #define LED_FLASH 4
 
+#define mqtt_server "192.168.1.64"
+#define mqtt_user "mqtt_user"
+#define mqtt_password ""
+
+//Wifi
 const char* ssid = "";
 const char* password = "";
 
+//Telegram credentials
 String BOTtoken = "";
 String chat_id  = "";
 
 const char* telegram_host = "api.telegram.org";
-WiFiClientSecure client;
+WiFiClientSecure espclient;
+PubSubClient client(espclient);
 
 void setup() {
   Serial.begin(115200);
-
+ 
   // Connect to WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
@@ -27,6 +35,10 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("\nWiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  client.setServer(mqtt_server, 1883);
 
   // Camera config
   camera_config_t config;
@@ -54,12 +66,12 @@ void setup() {
   pinMode(LED_FLASH, OUTPUT);
 
   if(psramFound()){
-    config.frame_size = FRAMESIZE_VGA; //Options: QQVGA/QVGA/VGA/SVGA/XGA/SXGA/UXGA
-    config.jpeg_quality = 14;
+    config.frame_size = FRAMESIZE_QVGA; //Options: QQVGA/QVGA/VGA/SVGA/XGA/SXGA/UXGA
+    config.jpeg_quality = 12;
     config.fb_count = 1;
     Serial.println("PsRam On");
   } else {
-    config.frame_size = FRAMESIZE_QVGA;
+    config.frame_size = FRAMESIZE_QQVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
     Serial.println("PsRam Off");
@@ -80,18 +92,40 @@ void setup() {
   s->set_exposure_ctrl(s, 1);           // auto exposure on
   s->set_whitebal(s, 1);                // auto white balance
 
-  client.setInsecure(); // allow HTTPS without cert
+  espclient.setInsecure(); // allow HTTPS without cert
   Serial.println("Setup done. Taking photo...");
   
   //delay(3000);
   //sendPhotoTelegram();  // Take and send one photo at startup
 }
 
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    // If you do not want to use a username and password, change next line to
+    // if (client.connect("ESP8266Client")) {
+    if (client.connect("ESP332CAM_lient", mqtt_user, mqtt_password)) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
 void loop() {
-  // Nothing here (one-time test)
-  delay(10000);
-  sendPhotoTelegram();
-  delay(10000);
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+  //delay(10000);
+  //sendPhotoTelegram();
+  //delay(10000);
 }
 
 void sendPhotoTelegram() {
@@ -117,7 +151,7 @@ void sendPhotoTelegram() {
     return;
   }
   
-  if (!client.connect(telegram_host, 443)) {
+  if (!espclient.connect(telegram_host, 443)) {
     Serial.println("Connection to Telegram failed");
     esp_camera_fb_return(fb);
     fb = NULL;
@@ -131,30 +165,30 @@ void sendPhotoTelegram() {
   uint32_t extraLen = head.length() + tail.length();
   uint32_t totalLen = imageLen + extraLen;
 
-  client.println("POST /bot" + BOTtoken + "/sendPhoto HTTP/1.1");
-  client.println("Host: " + String(telegram_host));
-  client.println("Content-Type: multipart/form-data; boundary=randomboundary");
-  client.println("Content-Length: " + String(totalLen));
-  client.println();
-  client.print(head);
+  espclient.println("POST /bot" + BOTtoken + "/sendPhoto HTTP/1.1");
+  espclient.println("Host: " + String(telegram_host));
+  espclient.println("Content-Type: multipart/form-data; boundary=randomboundary");
+  espclient.println("Content-Length: " + String(totalLen));
+  espclient.println();
+  espclient.print(head);
 
-  client.write(fb->buf, fb->len);
-  client.print(tail);
+  espclient.write(fb->buf, fb->len);
+  espclient.print(tail);
 
   esp_camera_fb_return(fb);
   fb = NULL;
 
   String response;
-  while (client.connected()) {
-    String line = client.readStringUntil('\n');
+  while (espclient.connected()) {
+    String line = espclient.readStringUntil('\n');
     if (line == "\r") break;
   }
-  while (client.available()) {
-    char c = client.read();
+  while (espclient.available()) {
+    char c = espclient.read();
     response += c;
   }
   Serial.println("Telegram response:");
   Serial.println(response);
 
-  client.stop();
+  espclient.stop();
 }
