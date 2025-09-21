@@ -9,11 +9,13 @@
 #define LED_FLASH 4
 
 #define mqtt_server "192.168.1.64"
+#define mqtt_port 1883
 #define mqtt_user "mqtt_user"
 #define mqtt_password ""
+#define topic_sub "homeassistant/sensor/front_door"
 
 //Wifi
-const char* ssid = "";
+const char* ssid = "Soi13";
 const char* password = "";
 
 //Telegram credentials
@@ -22,7 +24,8 @@ String chat_id  = "";
 
 const char* telegram_host = "api.telegram.org";
 WiFiClientSecure espclient;
-PubSubClient client(espclient);
+WiFiClient MQTTClient; //Here we use plain client for MQTT since MQTT doesn't work with secure connection (it requires plain TCP).
+PubSubClient client(MQTTClient);
 
 void setup() {
   Serial.begin(115200);
@@ -37,8 +40,6 @@ void setup() {
   Serial.println("\nWiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-
-  client.setServer(mqtt_server, 1883);
 
   // Camera config
   camera_config_t config;
@@ -92,59 +93,61 @@ void setup() {
   s->set_exposure_ctrl(s, 1);           // auto exposure on
   s->set_whitebal(s, 1);                // auto white balance
 
-  espclient.setInsecure(); // allow HTTPS without cert
-  Serial.println("Setup done. Taking photo...");
-  
-  //delay(3000);
-  //sendPhotoTelegram();  // Take and send one photo at startup
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
+
+  espclient.setInsecure();
+  Serial.println("Setup done.");
+}
+
+void callback(char* topic, byte* message, unsigned int length) {
+  Serial.print("Message arrived on topic: ");
+  Serial.println(topic);
+
+  String msg;
+  for (unsigned int i = 0; i < length; i++) {
+    msg += (char)message[i];
+  }
+  Serial.println("Message: " + msg);
+
+  if (msg == "motion_detected") {
+    sendPhotoTelegram();
+  }
 }
 
 void reconnect() {
-  // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    // If you do not want to use a username and password, change next line to
-    // if (client.connect("ESP8266Client")) {
-    if (client.connect("ESP332CAM_lient", mqtt_user, mqtt_password)) {
+    if (client.connect("ESP332CAM_client", mqtt_user, mqtt_password)) {
       Serial.println("connected");
+      client.subscribe(topic_sub);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
       delay(5000);
     }
   }
 }
 
-void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-  //delay(10000);
-  //sendPhotoTelegram();
-  //delay(10000);
-}
-
 void sendPhotoTelegram() {
+  //ESP32-CAM have specific feature, first photo can be with a poor quality. For fixing this issue at the very beginnig we take three pictures to stabilize camera and then discard them. After that we ready to take a picture for main purpose.
   camera_fb_t * fb;
   for (int i = 0; i < 3; i++) {
       fb = esp_camera_fb_get();
       if (fb) {
-          esp_camera_fb_return(fb); // discard
+          esp_camera_fb_return(fb);//Discard taken picture
           fb = NULL;
       }
-      delay(200); // let sensor adjust
+      delay(200); //Let sensor adjust
   }
 
-  digitalWrite(LED_FLASH, HIGH);  // LED ON
+  digitalWrite(LED_FLASH, HIGH);//FLASH ON
   delay(1000);
 
-  fb = esp_camera_fb_get();
+  fb = esp_camera_fb_get();//Take picture  
   
-  digitalWrite(LED_FLASH, LOW);  // LED OFF
+  digitalWrite(LED_FLASH, LOW);//FLASH OFF
 
   if (!fb) {
     Serial.println("Camera capture failed");
@@ -191,4 +194,11 @@ void sendPhotoTelegram() {
   Serial.println(response);
 
   espclient.stop();
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
 }
